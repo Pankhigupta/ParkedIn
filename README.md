@@ -75,7 +75,25 @@ Press **Start simulation** on the Home page. Prices update every 5 seconds. Use 
 **Admin** page to change the speed, the pricing balance, each lot's price limits, or to
 reset the replay. Stop everything with `Ctrl + C` in both terminals.
 
-## 5. Things to know
+## 5. Gemini AI assistant (optional)
+
+Set a Gemini API key before starting Streamlit. The app reads `GEMINI_API_KEY` from the
+environment, or from Streamlit secrets (`.streamlit/secrets.toml` locally / app secrets
+in Streamlit Community Cloud):
+
+```toml
+GEMINI_API_KEY = "your-key"
+```
+
+The **AI Assistant** page provides parking recommendations, price explanations, weekly
+reports, natural-language questions about recorded data, historical insights, and revenue
+strategy suggestions. These features use structured JSON responses and compact summaries
+from the local SQLite database. The assistant is read-only: it cannot execute SQL or change
+prices. Recommendations use lot distance, occupancy and price. Pricing and revenue advice
+must be treated as estimates because the simulator assumes, rather than measures, driver
+response to price. Without an API key, the core simulation and dashboard continue to work.
+
+## 6. Things to know
 
 - **Start the orchestrator first.** It creates `parkedin.db`. To start completely fresh,
   stop both programs and delete `parkedin.db` (plus `parkedin.db-wal` / `-shm` if present).
@@ -90,7 +108,7 @@ reset the replay. Stop everything with `Ctrl + C` in both terminals.
   missing readings are interpolated, and one lot (`BHMMBMMBX01`) whose coordinates were far
   from the others is placed next to them on the map.
 
-## 6. Put the dashboard online (Streamlit Community Cloud)
+## 7. Put the dashboard online (Streamlit Community Cloud)
 
 1. Push the repository to GitHub. Keep `requirements.txt` in the **repository root** (next to
    the `parkedin` folder); Streamlit Cloud only looks there or next to the main file.
