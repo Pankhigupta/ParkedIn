@@ -18,7 +18,7 @@ from google.genai import types
 import db
 from common import load_config
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen")
 SYSTEM_RULES = (
     "You are ParkedIn's business operations assistant. Use only supplied data. "
     "Do not invent measurements, causes, or guarantees. State uncertainty when useful. "
@@ -61,7 +61,8 @@ def _client_for_key(key):
 def _client(api_key=None):
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
-        raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY or add it to Streamlit secrets.")
+        raise RuntimeError(
+            "Gemini is not configured. Set GEMINI_API_KEY or add it to Streamlit secrets.")
     return _client_for_key(key)
 
 
@@ -74,11 +75,13 @@ def _generate(kind, instruction, context, api_key=None):
                                            response_schema=SCHEMAS[kind], temperature=0.2),
     )
     if not response.text:
-        raise RuntimeError("Gemini returned an empty response. Please try again.")
+        raise RuntimeError(
+            "Gemini returned an empty response. Please try again.")
     try:
         result = json.loads(response.text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError("Gemini returned an unreadable response. Please try again.") from exc
+        raise RuntimeError(
+            "Gemini returned an unreadable response. Please try again.") from exc
     return result
 
 
@@ -114,17 +117,20 @@ def _metrics_frame(frame):
 def recommend_parking(latitude, longitude, api_key=None):
     lots = _latest()
     if lots.empty:
-        raise RuntimeError("No live parking data is available yet. Start the simulation first.")
+        raise RuntimeError(
+            "No live parking data is available yet. Start the simulation first.")
     lat, lon = float(latitude), float(longitude)
     # Haversine distance from user-entered coordinates to lot coordinates.
     lat1, lon1 = np.radians(lat), np.radians(lon)
-    lat2, lon2 = np.radians(lots.latitude.to_numpy()), np.radians(lots.longitude.to_numpy())
-    a = np.sin((lat2-lat1)/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin((lon2-lon1)/2)**2
+    lat2, lon2 = np.radians(lots.latitude.to_numpy()), np.radians(
+        lots.longitude.to_numpy())
+    a = np.sin((lat2-lat1)/2)**2 + np.cos(lat1) * \
+        np.cos(lat2)*np.sin((lon2-lon1)/2)**2
     lots["distance_km"] = 6371 * 2 * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
     # Rank locally: shorter distance, more expected space, and lower price are preferred.
     lots["rank_score"] = (lots.distance_km / max(float(lots.distance_km.max()), .1)
-                           + lots.expected_occ
-                           + lots.price / max(float(lots.price.max()), 1))
+                          + lots.expected_occ
+                          + lots.price / max(float(lots.price.max()), 1))
     shortlist = lots.sort_values("rank_score").head(5)
     candidates = [{"lot": r.lot_id, "distance_km": round(float(r.distance_km), 2),
                    "current_occupancy_pct": round(float(r.occ_rate*100), 1),
@@ -188,8 +194,10 @@ def discover_insights(api_key=None):
     lot_day = frame.assign(day=frame.ts.dt.date.astype(str)).groupby(["lot_id", "day"]).agg(
         occupancy=("occ_rate", "mean"), price=("price", "mean")).reset_index()
     # Flag unusually high/low daily occupancy via IQR; deterministic statistics, not model claims.
-    q1, q3 = lot_day.occupancy.quantile([.25, .75]); spread = q3-q1
-    outliers = lot_day[(lot_day.occupancy < q1-1.5*spread) | (lot_day.occupancy > q3+1.5*spread)]
+    q1, q3 = lot_day.occupancy.quantile([.25, .75])
+    spread = q3-q1
+    outliers = lot_day[(lot_day.occupancy < q1-1.5*spread)
+                       | (lot_day.occupancy > q3+1.5*spread)]
     context = {"period": [str(frame.ts.min()), str(frame.ts.max())],
                "overall": _metrics_frame(frame), "hourly_patterns": hourly.to_dict("index"),
                "daily_occupancy_iqr_outliers": outliers.round(3).to_dict("records")[:30],
@@ -202,8 +210,9 @@ def advise_revenue_strategy(api_key=None):
     if frame.empty:
         raise RuntimeError("No historical simulation data is available yet.")
     by_lot = frame.groupby("lot_id").agg(avg_occupancy=("occ_rate", "mean"), avg_price=("price", "mean"),
-                                          high_occupancy_slots=("occ_rate", lambda s: int((s >= .9).sum())),
-                                          observations=("occ_rate", "size")).round(3)
+                                         high_occupancy_slots=(
+                                             "occ_rate", lambda s: int((s >= .9).sum())),
+                                         observations=("occ_rate", "size")).round(3)
     by_hour = frame.assign(hour=frame.ts.dt.hour).groupby("hour").agg(
         avg_occupancy=("occ_rate", "mean"), avg_price=("price", "mean")).round(3)
     context = {"period": [str(frame.ts.min()), str(frame.ts.max())], "by_lot": by_lot.to_dict("index"),
