@@ -18,7 +18,7 @@ from google.genai import types
 import db
 from common import load_config
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-4-neon")
 SYSTEM_RULES = (
     "You are ParkedIn's business operations assistant. Use only supplied data. "
     "Do not invent measurements, causes, or guarantees. State uncertainty when useful. "
