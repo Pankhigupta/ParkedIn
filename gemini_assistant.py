@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import timedelta
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -51,11 +52,17 @@ SCHEMAS = {
 }
 
 
+@lru_cache(maxsize=4)
+def _client_for_key(key):
+    """Keep a live SDK client across Streamlit reruns instead of recreating it per call."""
+    return genai.Client(api_key=key)
+
+
 def _client(api_key=None):
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY or add it to Streamlit secrets.")
-    return genai.Client(api_key=key)
+    return _client_for_key(key)
 
 
 def _generate(kind, instruction, context, api_key=None):
