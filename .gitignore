@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+parkedin.db*
+data/raw/*.csv
+data/processed/*
+models/*
+!**/.gitkeep
