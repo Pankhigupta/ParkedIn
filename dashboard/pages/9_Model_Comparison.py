@@ -1,12 +1,18 @@
 """Leaderboard and metric-based comparison of existing ParkedIn models."""
 import matplotlib.pyplot as plt
+import importlib
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 from _setup import ROOT  # noqa: F401
-from analytics.model_evaluation import (forecast_comparison, frozen_forecast_metrics,
-                                        implemented_model_catalog)
+from analytics import model_evaluation
+# Streamlit can retain imported Python modules across page reruns. Reload this
+# small, read-only analytics module so newly added evaluation helpers are visible.
+model_evaluation = importlib.reload(model_evaluation)
+forecast_comparison = model_evaluation.forecast_comparison
+implemented_model_catalog = model_evaluation.implemented_model_catalog
+frozen_forecast_metrics = getattr(model_evaluation, "frozen_forecast_metrics", None)
 from analytics.statistics import load_evaluation_metrics
 from common import METRICS_PATH
 
@@ -22,6 +28,8 @@ def load_saved_mae():
 
 @st.cache_data(show_spinner="Scoring frozen models on the held-out test split…")
 def load_frozen_metrics():
+    if frozen_forecast_metrics is None:
+        return pd.DataFrame()
     return frozen_forecast_metrics()
 
 
@@ -91,6 +99,8 @@ st.caption("Selection here follows held-out MAE; it does not imply the winner is
 
 st.subheader("Full regression / forecasting metrics")
 st.write("Full metrics below are computed by applying the already-fitted saved XGBoost models and naive persistence baseline to the actual held-out test rows. No model is refit. Random Forest and ARIMA provide only their saved MAE because their test predictions were not stored.")
+if frozen_forecast_metrics is None:
+    st.warning("The running app has an older cached analytics module. Restart Streamlit to load the current full-metrics helper; the saved-MAE leaderboard above is still available.")
 try:
     frozen = load_frozen_metrics()
 except Exception as exc:
