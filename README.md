@@ -77,12 +77,15 @@ reset the replay. Stop everything with `Ctrl + C` in both terminals.
 
 ## 5. Gemini AI assistant (optional)
 
-Set a Gemini API key before starting Streamlit. The app reads `GEMINI_API_KEY` from the
-environment, or from Streamlit secrets (`.streamlit/secrets.toml` locally / app secrets
-in Streamlit Community Cloud):
+Set one or both provider keys before starting Streamlit. The app reads keys from environment
+variables or Streamlit secrets (`.streamlit/secrets.toml` locally / app secrets in
+Streamlit Community Cloud). When both are configured, Gemini is tried first by default and
+OpenAI is used if Gemini returns an API error or invalid output. Set `AI_PRIMARY_PROVIDER`
+to `openai` to reverse the order.
 
 ```toml
 GEMINI_API_KEY = "your-key"
+OPENAI_API_KEY = "your-key"
 ```
 
 The **AI Assistant** page provides parking recommendations, price explanations, weekly
@@ -91,7 +94,8 @@ strategy suggestions. These features use structured JSON responses and compact s
 from the local SQLite database. The assistant is read-only: it cannot execute SQL or change
 prices. Recommendations use lot distance, occupancy and price. Pricing and revenue advice
 must be treated as estimates because the simulator assumes, rather than measures, driver
-response to price. Without an API key, the core simulation and dashboard continue to work.
+response to price. At least one provider key is required for AI features; without keys, the
+core simulation and dashboard continue to work.
 
 ## 6. Things to know
 

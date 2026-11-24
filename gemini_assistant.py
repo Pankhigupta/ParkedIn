@@ -14,11 +14,13 @@ import numpy as np
 import pandas as pd
 from google import genai
 from google.genai import types
+from openai import OpenAI
 
 import db
 from common import load_config
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-4-neon")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 SYSTEM_RULES = (
     "You are ParkedIn's business operations assistant. Use only supplied data. "
     "Do not invent measurements, causes, or guarantees. State uncertainty when useful. "
@@ -53,36 +55,91 @@ SCHEMAS = {
 
 
 @lru_cache(maxsize=4)
-def _client_for_key(key):
+def _gemini_client_for_key(key):
     """Keep a live SDK client across Streamlit reruns instead of recreating it per call."""
     return genai.Client(api_key=key)
 
 
-def _client(api_key=None):
+@lru_cache(maxsize=4)
+def _openai_client_for_key(key):
+    return OpenAI(api_key=key)
+
+
+def _gemini_client(api_key=None):
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
-        raise RuntimeError(
-            "Gemini is not configured. Set GEMINI_API_KEY or add it to Streamlit secrets.")
-    return _client_for_key(key)
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
+    return _gemini_client_for_key(key)
 
 
-def _generate(kind, instruction, context, api_key=None):
+def _openai_client(api_key=None):
+    key = api_key or os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY is not configured.")
+    return _openai_client_for_key(key)
+
+
+def _strict_openai_schema(schema):
+    """OpenAI strict JSON schema requires all properties and closed objects."""
+    result = dict(schema)
+    kind = result.get("type")
+    if kind == "OBJECT":
+        result["type"] = "object"
+        result["additionalProperties"] = False
+        result["required"] = list(result.get("properties", {}))
+        result["properties"] = {key: _strict_openai_schema(value)
+                                for key, value in result.get("properties", {}).items()}
+    elif kind == "ARRAY":
+        result["type"] = "array"
+        result["items"] = _strict_openai_schema(result["items"])
+    elif kind == "STRING":
+        result["type"] = "string"
+    return result
+
+
+def _generate_with_provider(provider, kind, prompt, gemini_key, openai_key):
+    if provider == "gemini":
+        response = _gemini_client(gemini_key).models.generate_content(
+            model=MODEL, contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json",
+                                               response_schema=SCHEMAS[kind], temperature=0.2),
+        )
+        response_text = response.text
+    else:
+        response = _openai_client(openai_key).responses.create(
+            model=OPENAI_MODEL, input=prompt,
+            text={"format": {"type": "json_schema", "name": kind,
+                             "schema": _strict_openai_schema(SCHEMAS[kind]), "strict": True}},
+        )
+        response_text = response.output_text
+    if not response_text:
+        raise RuntimeError("provider returned an empty response")
+    result = json.loads(response_text)
+    if not isinstance(result, dict) or any(field not in result for field in SCHEMAS[kind]["required"]):
+        raise RuntimeError("provider response did not match the expected schema")
+    return result
+
+
+def _generate(kind, instruction, context, api_key=None, openai_api_key=None):
     prompt = (f"{SYSTEM_RULES}\nTask: {instruction}\n"
               f"Trusted parking data (JSON):\n{json.dumps(context, default=str, ensure_ascii=False)}")
-    response = _client(api_key).models.generate_content(
-        model=MODEL, contents=prompt,
-        config=types.GenerateContentConfig(response_mime_type="application/json",
-                                           response_schema=SCHEMAS[kind], temperature=0.2),
-    )
-    if not response.text:
-        raise RuntimeError(
-            "Gemini returned an empty response. Please try again.")
-    try:
-        result = json.loads(response.text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            "Gemini returned an unreadable response. Please try again.") from exc
-    return result
+    gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+    openai_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+    primary = os.getenv("AI_PRIMARY_PROVIDER", "gemini").strip().lower()
+    if primary not in ("gemini", "openai"):
+        primary = "gemini"
+    keys = {"gemini": gemini_key, "openai": openai_key}
+    providers = [provider for provider in (primary, "openai" if primary == "gemini" else "gemini")
+                 if keys[provider]]
+    if not providers:
+        raise RuntimeError("Configure GEMINI_API_KEY, OPENAI_API_KEY, or both to enable AI features.")
+    errors = []
+    for provider in providers:
+        try:
+            return _generate_with_provider(provider, kind, prompt, gemini_key, openai_key)
+        except Exception as exc:  # API, network, and invalid structured output trigger failover.
+            errors.append(f"{provider}: {type(exc).__name__}: {str(exc)[:240]}")
+    raise RuntimeError("AI providers failed. " + " | ".join(errors))
 
 
 def _latest():
@@ -114,7 +171,7 @@ def _metrics_frame(frame):
     }
 
 
-def recommend_parking(latitude, longitude, api_key=None):
+def recommend_parking(latitude, longitude, api_key=None, openai_api_key=None):
     lots = _latest()
     if lots.empty:
         raise RuntimeError(
@@ -138,10 +195,11 @@ def recommend_parking(latitude, longitude, api_key=None):
                    "price_rs_per_hour": round(float(r.price), 1), "demand_level": r.level}
                   for r in shortlist.itertuples()]
     return _generate("recommendation", "Recommend the best option for a driver. Explain the tradeoff and list up to two alternatives.",
-                     {"user_location": {"latitude": lat, "longitude": lon}, "ranked_candidates": candidates}, api_key)
+                     {"user_location": {"latitude": lat, "longitude": lon}, "ranked_candidates": candidates},
+                     api_key, openai_api_key)
 
 
-def explain_price(lot_id, api_key=None):
+def explain_price(lot_id, api_key=None, openai_api_key=None):
     rows = _latest()
     match = rows[rows.lot_id == lot_id]
     if match.empty:
@@ -153,10 +211,10 @@ def explain_price(lot_id, api_key=None):
                "demand_level": r.level, "stored_pricing_reason": r.reason,
                "price_limits_rs": [float(r.min_price), float(r.max_price)],
                "target_occupancy_pct": round(load_config()["target_occupancy"]*100, 1)}
-    return _generate("explanation", "Explain the selected price to a parking operator. Separate the rule and occupancy signals from the pricing objective; mention the elasticity estimate is assumed.", context, api_key)
+    return _generate("explanation", "Explain the selected price to a parking operator. Separate the rule and occupancy signals from the pricing objective; mention the elasticity estimate is assumed.", context, api_key, openai_api_key)
 
 
-def weekly_report(api_key=None):
+def weekly_report(api_key=None, openai_api_key=None):
     frame = _history(7)
     context = _metrics_frame(frame)
     if not frame.empty:
@@ -169,10 +227,10 @@ def weekly_report(api_key=None):
             metrics.set_index("name").round(3).to_dict("index") if not metrics.empty else {})
     else:
         context["fixed_price_comparison_for_period"] = {}
-    return _generate("report", "Write an executive weekly business report. Keep it factual; identify operational implications and practical next actions.", context, api_key)
+    return _generate("report", "Write an executive weekly business report. Keep it factual; identify operational implications and practical next actions.", context, api_key, openai_api_key)
 
 
-def chat_about_data(question, api_key=None):
+def chat_about_data(question, api_key=None, openai_api_key=None):
     frame = _history(30)
     context = _metrics_frame(frame)
     if not frame.empty:
@@ -181,10 +239,10 @@ def chat_about_data(question, api_key=None):
             lot_slots=("lot_id", "size")).round(3).tail(30).to_dict("index")
         context["available_lots"] = sorted(frame.lot_id.unique().tolist())
     return _generate("chat", "Answer the user's question using only the supplied data. If it cannot be answered, say what is missing. Never make up SQL results.",
-                     {"question": question[:1000], "data": context}, api_key)
+                     {"question": question[:1000], "data": context}, api_key, openai_api_key)
 
 
-def discover_insights(api_key=None):
+def discover_insights(api_key=None, openai_api_key=None):
     frame = _history(30)
     if frame.empty:
         raise RuntimeError("No historical simulation data is available yet.")
@@ -202,10 +260,10 @@ def discover_insights(api_key=None):
                "overall": _metrics_frame(frame), "hourly_patterns": hourly.to_dict("index"),
                "daily_occupancy_iqr_outliers": outliers.round(3).to_dict("records")[:30],
                "method_note": "Outliers are lot-days outside 1.5 IQR fences for daily mean occupancy."}
-    return _generate("insights", "Identify the strongest supported trends and explain listed anomalies without claiming causation.", context, api_key)
+    return _generate("insights", "Identify the strongest supported trends and explain listed anomalies without claiming causation.", context, api_key, openai_api_key)
 
 
-def advise_revenue_strategy(api_key=None):
+def advise_revenue_strategy(api_key=None, openai_api_key=None):
     frame = _history(30)
     if frame.empty:
         raise RuntimeError("No historical simulation data is available yet.")
@@ -218,4 +276,4 @@ def advise_revenue_strategy(api_key=None):
     context = {"period": [str(frame.ts.min()), str(frame.ts.max())], "by_lot": by_lot.to_dict("index"),
                "by_hour": by_hour.to_dict("index"), "pricing_assumption":
                "Revenue simulations use a configured price elasticity, not measured customer response."}
-    return _generate("strategy", "Suggest up to three cautious, testable revenue actions based on the observed patterns. Include tradeoffs and one metric to track for each decision cycle.", context, api_key)
+    return _generate("strategy", "Suggest up to three cautious, testable revenue actions based on the observed patterns. Include tradeoffs and one metric to track for each decision cycle.", context, api_key, openai_api_key)
