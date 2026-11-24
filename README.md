@@ -75,7 +75,29 @@ Press **Start simulation** on the Home page. Prices update every 5 seconds. Use 
 **Admin** page to change the speed, the pricing balance, each lot's price limits, or to
 reset the replay. Stop everything with `Ctrl + C` in both terminals.
 
-## 5. Things to know
+## 5. Gemini AI assistant (optional)
+
+Set one or both provider keys before starting Streamlit. The app reads keys from environment
+variables or Streamlit secrets (`.streamlit/secrets.toml` locally / app secrets in
+Streamlit Community Cloud). When both are configured, Gemini is tried first by default and
+OpenAI is used if Gemini returns an API error or invalid output. Set `AI_PRIMARY_PROVIDER`
+to `openai` to reverse the order.
+
+```toml
+GEMINI_API_KEY = "your-key"
+OPENAI_API_KEY = "your-key"
+```
+
+The **AI Assistant** page provides parking recommendations, price explanations, weekly
+reports, natural-language questions about recorded data, historical insights, and revenue
+strategy suggestions. These features use structured JSON responses and compact summaries
+from the local SQLite database. The assistant is read-only: it cannot execute SQL or change
+prices. Recommendations use lot distance, occupancy and price. Pricing and revenue advice
+must be treated as estimates because the simulator assumes, rather than measures, driver
+response to price. At least one provider key is required for AI features; without keys, the
+core simulation and dashboard continue to work.
+
+## 6. Things to know
 
 - **Start the orchestrator first.** It creates `parkedin.db`. To start completely fresh,
   stop both programs and delete `parkedin.db` (plus `parkedin.db-wal` / `-shm` if present).
@@ -90,7 +112,7 @@ reset the replay. Stop everything with `Ctrl + C` in both terminals.
   missing readings are interpolated, and one lot (`BHMMBMMBX01`) whose coordinates were far
   from the others is placed next to them on the map.
 
-## 6. Put the dashboard online (Streamlit Community Cloud)
+## 7. Put the dashboard online (Streamlit Community Cloud)
 
 1. Push the repository to GitHub. Keep `requirements.txt` in the **repository root** (next to
    the `parkedin` folder); Streamlit Cloud only looks there or next to the main file.
@@ -98,6 +120,21 @@ reset the replay. Stop everything with `Ctrl + C` in both terminals.
 3. On the first visit the dashboard sets itself up: it downloads the dataset, trains the
    models (about 2 to 3 minutes) and starts the orchestrator in the background. Then press
    **Start simulation**. No second terminal is needed online.
+
+## Academic analytics layer
+
+The additive `analytics/` package provides read-only access to the raw CSV and processed
+feature dataset, plus the persisted XGBoost forecasting bundle, K-Means bundle, and saved
+evaluation artifacts. It does not train models or alter the simulation. Its reusable
+helpers are split across `statistics.py`, `eda.py`, `timeseries.py`, `model_evaluation.py`,
+`insights.py`, and `statistical_analysis.py`. The Statistics & Data Science page uses the actual raw CSV for hypothesis
+tests, distribution and correlation summaries, and EDA plots. Feature Engineering documents
+the existing `agents/data_agent.py` lineage, while Time Series Analysis reads the processed
+dataset and saved XGBoost forecast/evaluation artifacts. It labels runtime revenue as a
+simulator estimate and avoids filling overnight or missing-date gaps for decomposition.
+Machine Learning and Model Comparison inspect the existing saved artifacts and chronological
+test metrics without retraining. The Machine Learning page offers optional SHAP explanations
+(`shap` is installed with the requirements). Three other academic pages remain placeholders.
 
 ## Results on the test days (11 days, 196 slots)
 
@@ -123,6 +160,7 @@ Pricing at the assumed sensitivity of 0.4:
 parkedin/
 ├── agents/            five agents
 ├── dashboard/         Streamlit app (Home.py + pages/)
+├── analytics/         read-only academic analytics helpers
 ├── data/raw/          put dataset.csv here
 ├── data/processed/    created by train.py
 ├── models/            created by train.py
