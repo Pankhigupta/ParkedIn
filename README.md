@@ -127,9 +127,14 @@ The additive `analytics/` package provides read-only access to the raw CSV and p
 feature dataset, plus the persisted XGBoost forecasting bundle, K-Means bundle, and saved
 evaluation artifacts. It does not train models or alter the simulation. Its reusable
 helpers are split across `statistics.py`, `eda.py`, `timeseries.py`, `model_evaluation.py`,
-and `insights.py`. Eight placeholder pages are registered automatically through
-`dashboard/pages/`; they are intended as the navigation structure for future academic
-analysis and currently contain no visualizations.
+`insights.py`, and `statistical_analysis.py`. The Statistics & Data Science page uses the actual raw CSV for hypothesis
+tests, distribution and correlation summaries, and EDA plots. Feature Engineering documents
+the existing `agents/data_agent.py` lineage, while Time Series Analysis reads the processed
+dataset and saved XGBoost forecast/evaluation artifacts. It labels runtime revenue as a
+simulator estimate and avoids filling overnight or missing-date gaps for decomposition.
+Machine Learning and Model Comparison inspect the existing saved artifacts and chronological
+test metrics without retraining. The Machine Learning page offers optional SHAP explanations
+(`shap` is installed with the requirements). Three other academic pages remain placeholders.
 
 ## Results on the test days (11 days, 196 slots)
 
