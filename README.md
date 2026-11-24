@@ -121,6 +121,16 @@ core simulation and dashboard continue to work.
    models (about 2 to 3 minutes) and starts the orchestrator in the background. Then press
    **Start simulation**. No second terminal is needed online.
 
+## Academic analytics layer
+
+The additive `analytics/` package provides read-only access to the raw CSV and processed
+feature dataset, plus the persisted XGBoost forecasting bundle, K-Means bundle, and saved
+evaluation artifacts. It does not train models or alter the simulation. Its reusable
+helpers are split across `statistics.py`, `eda.py`, `timeseries.py`, `model_evaluation.py`,
+and `insights.py`. Eight placeholder pages are registered automatically through
+`dashboard/pages/`; they are intended as the navigation structure for future academic
+analysis and currently contain no visualizations.
+
 ## Results on the test days (11 days, 196 slots)
 
 Forecast error (MAE of occupancy rate, lower is better):
@@ -145,6 +155,7 @@ Pricing at the assumed sensitivity of 0.4:
 parkedin/
 ├── agents/            five agents
 ├── dashboard/         Streamlit app (Home.py + pages/)
+├── analytics/         read-only academic analytics helpers
 ├── data/raw/          put dataset.csv here
 ├── data/processed/    created by train.py
 ├── models/            created by train.py
