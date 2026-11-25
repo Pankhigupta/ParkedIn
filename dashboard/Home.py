@@ -36,7 +36,9 @@ def live_view():
 
     df["colour"] = df["level"].map(COLOURS)
     st.map(df, latitude="latitude", longitude="longitude", color="colour", size=40, zoom=14)
-    st.caption("Dot colour = demand level: green low, olive medium, orange high, red peak.")
+    peak_high = int(df["level"].isin(["peak", "high"]).sum())
+    low = int((df["level"] == "low").sum())
+    st.caption(f"{peak_high} of {len(df)} lots currently have high or peak demand; {low} have low demand.")
 
     def bar(label):
         return st.column_config.ProgressColumn(label, format="percent", min_value=0, max_value=1)

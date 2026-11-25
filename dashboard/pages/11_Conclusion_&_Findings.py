@@ -91,7 +91,7 @@ else:
                       title="Saved chronological test MAE by forecast horizon")
         fig.update_layout(legend_title_text="Model")
         st.plotly_chart(fig, use_container_width=True)
-        panel("Forecast error chart interpretation", "Saved held-out MAE for XGBoost, Random Forest, ARIMA and naive persistence at each horizon.", "MAE measures typical absolute occupancy-rate error; rising error with horizon indicates uncertainty grows as the prediction moves farther ahead.", "Saved test MAE ranks XGBoost lowest across the stored horizons; the production bundle therefore uses its six horizon-specific persisted models.")
+        panel("Forecast error chart interpretation", f"XGBoost has the lowest saved test error at {wins} of {len(winners)} forecast horizons. Its error is {h1['xgboost']:.3f} one slot ahead and {hlast['xgboost']:.3f} at {int(saved_mae.index[-1])} slots ahead.", "The longer the forecast, the less certain the occupancy estimate becomes.", "The production system uses the saved XGBoost model for each of its six forecast steps.")
     else:
         st.warning("Install Plotly (`pip install -r requirements.txt`) to render the forecast comparison chart.")
     st.write(f"**Model selection summary.** XGBoost is lowest at {wins} of {len(winners)} saved horizons. At one step it scores {h1['xgboost']:.5f} against the next-lowest {h1.drop('xgboost').min():.5f}; at {int(saved_mae.index[-1])} steps it scores {hlast['xgboost']:.5f}. This is a held-out MAE-based selection statement, not a claim of universal superiority under every metric.")
@@ -120,12 +120,20 @@ else:
         fig.add_hline(y=0, line_dash="dash", line_color="gray")
         fig.update_yaxes(title="Estimated revenue difference (%)")
         st.plotly_chart(fig, use_container_width=True)
-        panel("Revenue sensitivity chart interpretation", "Relative simulated revenue by pricing strategy as the assumed customer price elasticity changes.", "The sign and magnitude of the estimated impact are sensitive to how strongly demand responds to price.", "The configured scenario is shown as a conditional estimate. The wide scenario range argues for monitoring and calibration against real transactions before making a realized-impact claim.")
+        scenario_low = float(plot_data["revenue_vs_fixed_pct"].min())
+        scenario_high = float(plot_data["revenue_vs_fixed_pct"].max())
+        configured_result = (f"At the configured elasticity of {elast:.1f}, dynamic pricing estimates "
+                             f"{float(chosen.iloc[0]['revenue_vs_fixed_pct']):+.1f}% revenue versus fixed pricing. "
+                             if not chosen.empty else "No saved dynamic-pricing result matches the configured elasticity. ")
+        panel("Revenue sensitivity chart interpretation", configured_result +
+              f"Across all tested assumptions and strategies, estimates range from {scenario_low:+.1f}% to {scenario_high:+.1f}%.", "The result can change from a gain to a loss when the assumed driver response changes.", "Treat this as a scenario estimate; real transaction data is needed to confirm the effect.")
         if "lot_slots_95pct_full" in pricing.columns:
             fig2 = px.bar(pricing, x="elasticity", y="lot_slots_95pct_full", color="strategy", barmode="group",
                           title="Simulated lot-slots at or above 95% utilization")
             st.plotly_chart(fig2, use_container_width=True)
-            panel("Capacity pressure chart interpretation", "Simulated number of lot-slots reaching at least 95% utilization under each pricing strategy and elasticity assumption.", "Near-capacity events show a separate operational dimension from estimated revenue.", "The grid search is evaluated on both revenue and occupancy gap; decisions should account for capacity and service goals alongside revenue.")
+            configured_full = int(chosen.iloc[0]["lot_slots_95pct_full"]) if not chosen.empty else 0
+            fixed_full = int(fixed.iloc[0]["lot_slots_95pct_full"]) if not fixed.empty else 0
+            panel("Capacity pressure chart interpretation", f"At elasticity {elast:.1f}, the dynamic strategy has {configured_full} lot-slots at 95% full, compared with {fixed_full} under fixed pricing.", "This shows whether the estimated revenue result comes with more or fewer near-capacity periods.", "Use the occupancy and revenue estimates together when comparing strategies.")
     else:
         st.warning("Install Plotly (`pip install -r requirements.txt`) to render pricing scenario charts.")
 

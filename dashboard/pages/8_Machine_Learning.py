@@ -91,8 +91,12 @@ with tab3:
 with tab4:
     st.subheader("Chronological train / validation / test split")
     c1, c2, c3 = st.columns(3)
-    for column, split_name, dates in ((c1, "Train", train_days), (c2, "Validation", val_days), (c3, "Test", test_days)):
-        subset = data[data.split == split_name.lower()]
+    # The data pipeline stores this partition as "val"; keep the UI label descriptive.
+    for column, split_name, split_key, dates in (
+            (c1, "Train", "train", train_days),
+            (c2, "Validation", "val", val_days),
+            (c3, "Test", "test", test_days)):
+        subset = data[data.split == split_key]
         column.metric(split_name, f"{len(subset):,} rows", f"{len(dates)} dates")
         if dates:
             column.caption(f"{pd.Timestamp(dates[0]):%d %b %Y}–{pd.Timestamp(dates[-1]):%d %b %Y}")
@@ -139,7 +143,7 @@ with tab6:
             ax.set(title="Native tree importance · horizon 1", xlabel="Relative importance", ylabel="Feature")
             fig.tight_layout()
             st.pyplot(fig, clear_figure=True)
-            st.caption("Values come from the saved h=1 XGBoost model's native tree importance. They describe model use, not causal effects.")
+            st.caption(f"{native_importance.index[-1]} has the largest influence on the saved one-step forecast model.")
             saved_metrics = load_evaluation_metrics().get("feature_importance", {})
             if saved_metrics:
                 st.write("Training-report importance saved during validation-model evaluation:")
@@ -194,6 +198,8 @@ with tab6:
                 ax.set(title="Global SHAP importance · held-out rows", xlabel="Mean absolute SHAP value", ylabel="Feature")
                 fig.tight_layout()
                 st.pyplot(fig, clear_figure=True)
+                global_top = global_values.index[-1]
+                st.caption(f"Across the sampled test rows, {global_top} has the largest average effect on the model's predictions.")
 
                 local = pd.DataFrame({"feature": shap_result["features"],
                                       "contribution": shap_result["local"],
@@ -208,8 +214,9 @@ with tab6:
                        xlabel="Contribution to predicted occupancy rate", ylabel="Feature")
                 fig.tight_layout()
                 st.pyplot(fig, clear_figure=True)
-                st.caption(f"Baseline {shap_result['baseline']:.3f} + feature contributions ≈ "
-                           f"prediction {shap_result['prediction']:.3f}. Positive contributions raise the prediction; negative contributions lower it.")
+                strongest = local.iloc[local.contribution.abs().argmax()]
+                effect = "raises" if strongest.contribution > 0 else "lowers"
+                st.caption(f"For this lot and time, {strongest.feature} most strongly {effect} the predicted occupancy; the forecast is {shap_result['prediction']:.0%}.")
                 st.dataframe(local.rename(columns={"feature": "Feature", "contribution": "SHAP contribution",
                                                    "feature_value": "Observed feature value"}),
                              hide_index=True, use_container_width=True)

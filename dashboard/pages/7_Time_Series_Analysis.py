@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 from _setup import ROOT  # noqa: F401  # adds root for project imports
 from agents.data_agent import FEATURES
@@ -53,8 +52,8 @@ st.caption(f"{len(data):,} processed lot-slot rows · {data.SystemCodeNumber.nun
            f"{len(series):,} observed half-hour timestamps · overnight gaps are not filled.")
 
 tabs = st.tabs(["1. Time Series Overview", "2. Trend Analysis", "3. Seasonality Analysis",
-                "4. Stationarity Analysis", "5. Decomposition", "6. Autocorrelation",
-                "7. Forecasting Justification"])
+                "4. Stationarity Analysis", "5. Decomposition",
+                "6. Forecasting Justification"])
 
 
 # 1. Time series overview
@@ -67,7 +66,7 @@ with tabs[0]:
     axes[1].set(title="Capacity-weighted occupancy rate (demand level)", ylabel="Occupancy rate", xlabel="Observed time")
     fig.tight_layout()
     st.pyplot(fig, clear_figure=True)
-    st.caption("The project dataset contains daytime lot readings. Overnight and missing-date gaps remain gaps; this page does not synthesize readings.")
+    st.caption(f"Across the observed period, average occupancy was {series.occupancy_rate.mean():.0%}; the highest half-hour reached {series.occupancy_rate.max():.0%}.")
 
     st.markdown("#### Revenue over time")
     try:
@@ -86,7 +85,12 @@ with tabs[0]:
             if "revenue_fixed" in revenue:
                 chart["Fixed-price estimate"] = revenue["revenue_fixed"].cumsum()
             st.line_chart(chart, y_label="Cumulative simulated revenue (Rs)")
-            st.caption("These runtime metrics are simulator revenue estimates based on assumed price elasticity, not observed transaction revenue.")
+            if {"revenue_dynamic", "revenue_fixed"}.issubset(revenue.columns):
+                difference = float(chart["Dynamic pricing estimate"].iloc[-1] - chart["Fixed-price estimate"].iloc[-1])
+                lead = "ahead of" if difference > 0 else "behind" if difference < 0 else "level with"
+                st.caption(f"By the end of this replay, dynamic pricing is Rs {abs(difference):,.0f} {lead} fixed pricing in simulated revenue (an estimate, not recorded sales).")
+            else:
+                st.caption("The available revenue line rises over the replay; this is a simulator estimate, not recorded transaction revenue.")
     except (FileNotFoundError, ValueError, pd.errors.DatabaseError) as exc:
         st.info(f"Revenue history unavailable: {exc}. The raw dataset contains no revenue or price fields.")
 
@@ -116,6 +120,8 @@ with tabs[1]:
         fig.tight_layout()
         st.pyplot(fig, clear_figure=True)
         st.metric("Trend slope", f"{slope*100:+.3f} occupancy-rate percentage points per calendar day")
+        trend_direction = "increasing" if slope > 0 else "decreasing" if slope < 0 else "nearly flat"
+        st.caption(f"The fitted line shows a {trend_direction} occupancy pattern across the recorded dates.")
     else:
         st.info("Not enough dates to estimate a trend.")
     daily_table = daily.reset_index()
@@ -143,7 +149,10 @@ with tabs[2]:
     ax.set(title="Mean occupancy by day of week", xlabel="Day", ylabel="Occupancy rate", ylim=(0, 1))
     ax.tick_params(axis="x", rotation=35)
     c2.pyplot(fig, clear_figure=True)
-    st.caption("Coverage is roughly 08:00–16:30. Nighttime and annual seasonality cannot be inferred from these data.")
+    if not hour_profile.empty and not weekday_profile.empty:
+        peak_hour = hour_profile.loc[hour_profile["mean"].idxmax()]
+        busy_day = weekday_profile.loc[weekday_profile["mean"].idxmax()]
+        st.caption(f"Occupancy is highest around {int(peak_hour.hour):02d}:00 and on {busy_day.day_name}; these are the busiest observed periods.")
     st.dataframe(weekday_profile.rename(columns={"day_name": "Day", "count": "Processed slots",
                                                   "mean": "Mean occupancy rate", "std": "Std. deviation"}),
                  hide_index=True, use_container_width=True)
@@ -187,35 +196,17 @@ with tabs[4]:
         fig.suptitle("STL components · daily park-wide occupancy rate", y=1.01)
         fig.tight_layout()
         st.pyplot(fig, clear_figure=True)
-        st.caption(f"STL period={decomposition['period']}; longest uninterrupted calendar segment "
-                   f"{decomposition['start']:%d %b %Y}–{decomposition['end']:%d %b %Y} "
-                   f"(n={decomposition['observations']}). Missing dates were not filled.")
+        trend_change = float(components.trend.iloc[-1] - components.trend.iloc[0])
+        trend_word = "increases" if trend_change > 0 else "decreases" if trend_change < 0 else "stays nearly level"
+        seasonal_swing = float(components.seasonal.max() - components.seasonal.min())
+        st.caption(f"The underlying trend {trend_word} across this period; the repeating weekly pattern spans about {seasonal_swing*100:.1f} percentage points.")
         st.write(f"Seasonal component SD: {components.seasonal.std():.4f} · residual SD: {components.residual.std():.4f} occupancy-rate units.")
     else:
         st.info(decomposition.get("reason", "STL decomposition unavailable."))
 
 
-# 6. Autocorrelation
+# 6. Forecasting justification
 with tabs[5]:
-    st.subheader("Autocorrelation · ACF and PACF")
-    st.write("Both plots use the same contiguous daily occupancy-rate segment used for ADF and STL.")
-    if len(regular_daily) >= 10:
-        values = regular_daily.occupancy_rate.astype(float)
-        lags = min(14, len(values)//2-1)
-        left, right = st.columns(2)
-        fig, ax = plt.subplots(figsize=(6, 4))
-        plot_acf(values, lags=lags, ax=ax, title="ACF · daily occupancy rate")
-        left.pyplot(fig, clear_figure=True)
-        fig, ax = plt.subplots(figsize=(6, 4))
-        plot_pacf(values, lags=lags, method="ywm", ax=ax, title="PACF · daily occupancy rate")
-        right.pyplot(fig, clear_figure=True)
-        st.caption(f"{len(values)} consecutive processed daily values · lags 1–{lags}. Correlation bands are approximate and do not identify causal effects.")
-    else:
-        st.info("At least 10 consecutive daily values are needed for ACF/PACF.")
-
-
-# 7. Forecasting justification
-with tabs[6]:
     st.subheader("Forecasting justification")
     st.write("Repeated half-hour occupancy readings, time-of-day and weekday patterns, and lag dependence provide information for anticipating near-future occupancy. Forecasting helps the pricing layer use expected next-slot demand rather than only the latest reading.")
     if not evaluation.empty:
@@ -271,7 +262,9 @@ with tabs[6]:
                     fig.tight_layout()
                     st.pyplot(fig, clear_figure=True)
                     st.metric("MAE for this selected six-slot window", f"{error:.4f}")
-                    st.caption("One selected held-out example; use the aggregate test-set MAE table for overall model comparison.")
+                    mean_error = float((forecast - actual).mean())
+                    error_direction = "overpredicts" if mean_error > 0 else "underpredicts" if mean_error < 0 else "matches on average"
+                    st.caption(f"For this example, the forecast {error_direction} by {abs(mean_error):.1%} on average; its mean absolute error is {error:.3f}.")
         except Exception as exc:
             st.warning(f"Saved forecast trace unavailable: {exc}")
 

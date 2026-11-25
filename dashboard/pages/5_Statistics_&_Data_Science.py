@@ -50,12 +50,10 @@ st.caption(f"Source: `{ROOT / 'data' / 'raw' / 'dataset.csv'}` · "
            f"{df.date.nunique()} observed dates · {df.timestamp.min():%d %b %Y} to {df.timestamp.max():%d %b %Y}")
 
 tabs = st.tabs([
-    "Problem-Driven Research Questions",
     "Hypothesis Testing",
     "Distribution & Data Quality",
     "Correlation & Feature Discovery",
     "EDA Insights",
-    "Statistical Decisions Taken",
 ])
 
 
@@ -76,36 +74,37 @@ def show_test_details(question, null, alternative, test, rationale, interpretati
     st.markdown(f"**Feature engineering impact:** {feature_impact}")
 
 
-# 1. Research questions
-with tabs[0]:
-    st.subheader("Why investigate the data before modeling?")
-    st.write("The analysis tests whether observed operating conditions carry demand information. "
-             "Results inform feature choices and forecasting rationale; associations in this observational dataset do not prove causation.")
-    st.markdown(f"**Dataset inspected:** {len(df):,} raw readings across "
-                f"{df.SystemCodeNumber.nunique()} lots and {df.date.nunique()} dates. "
-                "The source has no price, revenue, or weather columns.")
-    questions = [
-        ("RQ1 · Traffic congestion", "Does traffic congestion near a lot significantly increase parking occupancy?",
-         "A pricing engine may need demand estimates that account for nearby congestion."),
-        ("RQ2 · Special days", "Do special days create demand patterns different from normal days?",
-         "Special-day demand changes may affect demand-aware pricing and planning."),
-        ("RQ3 · Queue pressure", "Does queue length act as an observable indicator of parking demand pressure?",
-         "Queue buildup may provide an operational signal for near-term occupancy."),
-        ("RQ4 · Vehicle types", "Do readings associated with different vehicle types show different occupancy behavior?",
-         "A measurable relationship could motivate evaluating vehicle-type features."),
-        ("RQ5 · Temporal structure", "Does occupancy vary systematically by hour and day?",
-         "Repeatable patterns support calendar and lag-based forecasting features."),
-    ]
-    for title, question, relevance in questions:
-        with st.container(border=True):
-            st.markdown(f"#### {title}")
-            st.write(question)
-            st.caption(f"Business relevance: {relevance}")
-    st.info("Weather and customer prices are not recorded in the supplied CSV. This page does not estimate weather effects or claim a causal price response.")
-
+# Hidden page section: Problem-Driven Research Questions.
+if False:
+    # 1. Research questions
+    with tabs[0]:
+        st.subheader("Why investigate the data before modeling?")
+        st.write("The analysis tests whether observed operating conditions carry demand information. "
+                 "Results inform feature choices and forecasting rationale; associations in this observational dataset do not prove causation.")
+        st.markdown(f"**Dataset inspected:** {len(df):,} raw readings across "
+                    f"{df.SystemCodeNumber.nunique()} lots and {df.date.nunique()} dates. "
+                    "The source has no price, revenue, or weather columns.")
+        questions = [
+            ("RQ1 · Traffic congestion", "Does traffic congestion near a lot significantly increase parking occupancy?",
+             "A pricing engine may need demand estimates that account for nearby congestion."),
+            ("RQ2 · Special days", "Do special days create demand patterns different from normal days?",
+             "Special-day demand changes may affect demand-aware pricing and planning."),
+            ("RQ3 · Queue pressure", "Does queue length act as an observable indicator of parking demand pressure?",
+             "Queue buildup may provide an operational signal for near-term occupancy."),
+            ("RQ4 · Vehicle types", "Do readings associated with different vehicle types show different occupancy behavior?",
+             "A measurable relationship could motivate evaluating vehicle-type features."),
+            ("RQ5 · Temporal structure", "Does occupancy vary systematically by hour and day?",
+             "Repeatable patterns support calendar and lag-based forecasting features."),
+        ]
+        for title, question, relevance in questions:
+            with st.container(border=True):
+                st.markdown(f"#### {title}")
+                st.write(question)
+                st.caption(f"Business relevance: {relevance}")
+        st.info("Weather and customer prices are not recorded in the supplied CSV. This page does not estimate weather effects or claim a causal price response.")
 
 # 2. Hypothesis tests
-with tabs[1]:
+with tabs[0]:
     st.subheader("Hypothesis tests on observed readings")
     st.caption("Significance threshold α = 0.05. Tests are observational; repeated readings may be correlated within lot and date.")
 
@@ -239,7 +238,7 @@ with tabs[1]:
 
 
 # 3. Distribution and data quality
-with tabs[2]:
+with tabs[1]:
     st.subheader("Distribution and data quality")
     st.write("These summaries describe the supplied observations before drawing modeling conclusions. Outliers are flagged for review, not automatically removed.")
     metric_rows = []
@@ -259,16 +258,24 @@ with tabs[2]:
     sns.histplot(df["Occupancy"].dropna(), bins=35, kde=True, stat="density", ax=occ_ax, color="#4267ac")
     occ_ax.set(title="Observed occupancy distribution", xlabel="Occupancy (vehicles)", ylabel="Density")
     st.pyplot(occ_fig, clear_figure=True)
+    occ_summary = distribution_result["Occupancy"]
+    occ_tail = "above" if occ_summary["mean"] > occ_summary["median"] else "below" if occ_summary["mean"] < occ_summary["median"] else "about the same as"
+    st.caption(f"Most readings are near the median of {occ_summary['median']:.0f} vehicles; the mean ({occ_summary['mean']:.0f}) is {occ_tail} it.")
 
     rate_fig, rate_ax = plt.subplots(figsize=(8, 3.5))
     sns.histplot(df["OccupancyRate"].dropna(), bins=35, kde=True, stat="density", ax=rate_ax, color="#258277")
     rate_ax.set(title="Occupancy rate distribution", xlabel="Occupancy / capacity", ylabel="Density")
     st.pyplot(rate_fig, clear_figure=True)
+    rate_summary = distribution_result["OccupancyRate"]
+    rate_tail = "above" if rate_summary["mean"] > rate_summary["median"] else "below" if rate_summary["mean"] < rate_summary["median"] else "about the same as"
+    st.caption(f"Occupancy rates cluster around {rate_summary['median']:.0%}; the mean ({rate_summary['mean']:.0%}) is {rate_tail} it.")
 
     queue_fig, queue_ax = plt.subplots(figsize=(8, 3.5))
     sns.histplot(df["QueueLength"].dropna(), discrete=True, kde=False, ax=queue_ax, color="#bb7737")
     queue_ax.set(title="Queue-length distribution", xlabel="Queue length", ylabel="Readings")
     st.pyplot(queue_fig, clear_figure=True)
+    common_queue = int(df["QueueLength"].mode().iloc[0])
+    st.caption(f"The most common recorded queue length is {common_queue} vehicles.")
 
     b1, b2, b3 = st.columns(3)
     for column, title, container in (("Occupancy", "Occupancy boxplot", b1),
@@ -278,15 +285,10 @@ with tabs[2]:
         sns.boxplot(y=df[column], ax=ax, color="#8ca6c9")
         ax.set_title(title)
         container.pyplot(fig, clear_figure=True)
-
-    st.markdown("#### Normality investigation · Shapiro–Wilk")
-    normality = distribution_result["occupancy_normality"]
-    st.write(f"W = {normality['statistic']:.5f} · p = {normality['p_value']:.4g} · "
-             f"n tested = {normality['n_tested']:,} (deterministic sample cap of 5,000 when needed).")
-    if normality["p_value"] < .05:
-        st.info("At α = 0.05, the normality null is rejected for occupancy. Large samples can detect small deviations; inspect distribution shape and use robust summaries alongside parametric tests.")
-    else:
-        st.info("At α = 0.05, the test does not provide evidence against normality for the tested sample. This is not proof that occupancy is normally distributed.")
+        median = float(df[column].median())
+        typical = f"Typical occupancy is about {median:.0%}." if column == "OccupancyRate" else (
+            f"Typical {column.lower()} is about {median:.0f} vehicles.")
+        container.caption(typical)
 
     st.markdown("#### Outlier investigation · 1.5 × IQR fences")
     iqr_rows = []
@@ -300,15 +302,18 @@ with tabs[2]:
 
 
 # 4. Correlation and feature discovery
-with tabs[3]:
+with tabs[2]:
     st.subheader("Correlation and feature discovery")
-    st.caption("Pearson correlations describe linear association. Encoded traffic is ordinal by design; nominal labels such as vehicle type are analyzed as groups instead.")
     corr = correlation_result["matrix"]
     fig, ax = plt.subplots(figsize=(10, 7))
     sns.heatmap(corr, cmap="vlag", center=0, vmin=-1, vmax=1, annot=True, fmt=".2f",
                 square=True, linewidths=.4, ax=ax)
     ax.set_title("Correlation heatmap · observed numeric variables")
     st.pyplot(fig, clear_figure=True)
+    strongest_positive = correlation_result["positive"][0] if correlation_result["positive"] else None
+    strongest_negative = correlation_result["negative"][0] if correlation_result["negative"] else None
+    if strongest_positive:
+        st.caption(f"The strongest positive relationship is {strongest_positive[0]} with {strongest_positive[1]} (r={strongest_positive[2]:.2f}); this is an association, not proof of cause.")
     pos_col, neg_col = st.columns(2)
     with pos_col:
         st.markdown("**Top positive correlations**")
@@ -347,21 +352,25 @@ with tabs[3]:
 
 
 # 5. EDA insights and raw-data views
-with tabs[4]:
+with tabs[3]:
     st.subheader("Exploratory analysis of observed operating patterns")
-    st.caption("All charts below are derived from the supplied CSV. Group differences are descriptive and do not establish causality.")
-
     c1, c2 = st.columns(2)
     fig, ax = plt.subplots(figsize=(7, 4))
     sns.boxplot(data=df, x="TrafficConditionNearby", y="OccupancyRate",
                 order=[x for x in ["low", "average", "high"] if x in df.TrafficConditionNearby.unique()], ax=ax)
     ax.set(title="Occupancy rate by traffic condition", xlabel="Nearby traffic", ylabel="Occupancy rate")
     c1.pyplot(fig, clear_figure=True)
+    traffic_means = df.groupby("TrafficConditionNearby").OccupancyRate.mean().dropna()
+    if not traffic_means.empty:
+        c1.caption(f"{traffic_means.idxmax().title()} traffic has the highest average occupancy ({traffic_means.max():.0%}) in this data.")
 
     fig, ax = plt.subplots(figsize=(7, 4))
     sns.boxplot(data=df, x="VehicleType", y="OccupancyRate", ax=ax)
     ax.set(title="Occupancy rate by vehicle type", xlabel="Recorded vehicle type", ylabel="Occupancy rate")
     c2.pyplot(fig, clear_figure=True)
+    vehicle_means = df.groupby("VehicleType").OccupancyRate.mean().dropna()
+    if not vehicle_means.empty:
+        c2.caption(f"{vehicle_means.idxmax()} has the highest average occupancy rate ({vehicle_means.max():.0%}) among the recorded vehicle labels.")
 
     c1, c2 = st.columns(2)
     special_view = df.assign(DayType=np.where(df.IsSpecialDay == 1, "Special day", "Regular day"))
@@ -369,6 +378,9 @@ with tabs[4]:
     sns.boxplot(data=special_view, x="DayType", y="OccupancyRate", ax=ax, color="#81a9c8")
     ax.set(title="Occupancy rate by special-day flag", xlabel="Date type", ylabel="Occupancy rate")
     c1.pyplot(fig, clear_figure=True)
+    special_means = special_view.groupby("DayType").OccupancyRate.mean()
+    higher_day = special_means.idxmax()
+    c1.caption(f"Average occupancy is higher on {higher_day.lower()}s ({special_means.max():.0%}) in this sample.")
 
     daily = df.groupby("date").agg(occupancy_rate=("OccupancyRate", "mean"),
                                     occupancy=("Occupancy", "mean")).reset_index()
@@ -377,6 +389,9 @@ with tabs[4]:
     ax.set(title="Mean occupancy rate over observed dates", xlabel="Date", ylabel="Mean occupancy rate")
     ax.tick_params(axis="x", rotation=35)
     c2.pyplot(fig, clear_figure=True)
+    if len(daily):
+        date_direction = "higher" if daily.occupancy_rate.iloc[-1] > daily.occupancy_rate.iloc[0] else "lower"
+        c2.caption(f"The final recorded day's mean occupancy is {date_direction} than the first day's.")
 
     c1, c2 = st.columns(2)
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -384,12 +399,17 @@ with tabs[4]:
                 scatter_kws={"alpha": .16, "s": 12}, line_kws={"color": "#b33b3b"}, ci=None)
     ax.set(title="Queue length vs observed occupancy", xlabel="Queue length", ylabel="Occupancy (vehicles)")
     c1.pyplot(fig, clear_figure=True)
+    if queue_result.get("available"):
+        relation = "rises" if queue_result["r"] > 0 else "falls" if queue_result["r"] < 0 else "changes little"
+        c1.caption(f"Occupancy generally {relation} as queue length grows (correlation r={queue_result['r']:.2f}).")
 
     fig, ax = plt.subplots(figsize=(7, 4))
     sns.scatterplot(data=df, x="Capacity", y="Occupancy", hue="SystemCodeNumber",
                     alpha=.45, s=18, legend=False, ax=ax)
     ax.set(title="Capacity vs observed occupancy", xlabel="Lot capacity", ylabel="Occupancy (vehicles)")
     c2.pyplot(fig, clear_figure=True)
+    capacity_corr = float(df[["Capacity", "Occupancy"]].corr().iloc[0, 1])
+    c2.caption(f"Larger-capacity lots tend to have more occupied spaces (r={capacity_corr:.2f}); this compares counts, not occupancy rates.")
 
     st.markdown("#### Data-driven insight cards")
     if weekend_result.get("available"):
@@ -416,37 +436,39 @@ with tabs[4]:
                    f"{weekend_result['decision']}")
 
 
-# 6. Statistical decisions
-with tabs[5]:
-    st.subheader("How evidence connects to the current data-science design")
-    st.write("This table documents observed evidence alongside the existing model pipeline. It does not change feature selection, retrain models, or alter pricing.")
-    rows = []
-    if traffic_result.get("available"):
-        rows.append({"Finding": "Traffic condition is associated with occupancy" if traffic_result["p_value"] < .05 else "Traffic effect not established at α=.05",
-                     "Evidence": f"One-way ANOVA p={traffic_result['p_value']:.4g}; η²={traffic_result['eta_squared']:.3f}.",
-                     "Project decision": "Existing `traffic` encoding (0/1/2) is retained as a forecast input; the association is not interpreted causally."})
-    if special_result.get("available"):
-        rows.append({"Finding": "Special-day occupancy differs" if special_result["p_value"] < .05 else "Special-day difference not established at α=.05",
-                     "Evidence": f"Daily means: regular {special_result['regular_mean']:.1%}, special {special_result['special_mean']:.1%}; Welch p={special_result['p_value']:.4g}; 95% CI [{special_result['ci_low']:.1%}, {special_result['ci_high']:.1%}].",
-                     "Project decision": "`IsSpecialDay` remains in the existing forecast feature list; this test documents its observed relevance."})
-    if queue_result.get("available"):
-        rows.append({"Finding": "Queue length has a positive occupancy association" if queue_result["r"] > 0 and queue_result["correlation_p"] < .05 else "Queue association is weak or not established",
-                     "Evidence": f"Pearson r={queue_result['r']:.3f}, p={queue_result['correlation_p']:.4g}; regression slope={queue_result['slope']:.5f}.",
-                     "Project decision": "`QueueLength` is already included as a forecast input; its incremental predictive value should be judged with held-out model evaluation."})
-    if temporal_result.get("available"):
-        rows.append({"Finding": "Occupancy varies by hour" if temporal_result["p_value"] < .05 else "Hourly variation not established at α=.05",
-                     "Evidence": f"One-way ANOVA p={temporal_result['p_value']:.4g}; {temporal_result['hourly']['hour'].nunique()} hours observed.",
-                     "Project decision": "Calendar fields (`hour`, `dow`) and occupancy lags are included in the existing forecaster; the dataset contains daytime readings only."})
-    if vehicle_result.get("available"):
-        rows.append({"Finding": "Vehicle-type group means differ" if vehicle_result["p_value"] < .05 else "Vehicle-type difference not established at α=.05",
-                     "Evidence": f"One-way ANOVA p={vehicle_result['p_value']:.4g}; {len(vehicle_result['groups'])} recorded labels.",
-                     "Project decision": "`VehicleType` is not currently a forecast input. Treat it as a candidate for a future leakage-safe, out-of-sample comparison, not as an automatically accepted feature."})
-    rows.append({"Finding": "Lot size affects raw occupancy scale",
-                 "Evidence": f"Lot capacities range from {df.Capacity.min():.0f} to {df.Capacity.max():.0f}; the pipeline defines OccupancyRate = Occupancy / Capacity.",
-                 "Project decision": "Use normalized occupancy rate for the forecasting target and compare lots on a common 0–1 scale."})
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    st.markdown("#### Interpretation limits")
-    st.markdown("- The source dataset has no weather, transaction price, or realized revenue fields. Weather and price causality cannot be tested from these readings.\n"
-                "- The analyses use observational readings. Repeated measurements within lots and dates can violate independent-observation assumptions; p-values should be read as exploratory evidence.\n"
-                "- Statistical association is not the same as forecasting usefulness. The project's chronological held-out evaluation remains the appropriate check for predictive value.\n"
-                "- VehicleType labels describe the recorded rows; the dataset does not document that occupancy is split into vehicle-specific counts.")
+# Hidden page section: Statistical Decisions Taken.
+if False:
+    # 6. Statistical decisions
+    with tabs[5]:
+        st.subheader("How evidence connects to the current data-science design")
+        st.write("This table documents observed evidence alongside the existing model pipeline. It does not change feature selection, retrain models, or alter pricing.")
+        rows = []
+        if traffic_result.get("available"):
+            rows.append({"Finding": "Traffic condition is associated with occupancy" if traffic_result["p_value"] < .05 else "Traffic effect not established at α=.05",
+                         "Evidence": f"One-way ANOVA p={traffic_result['p_value']:.4g}; η²={traffic_result['eta_squared']:.3f}.",
+                         "Project decision": "Existing `traffic` encoding (0/1/2) is retained as a forecast input; the association is not interpreted causally."})
+        if special_result.get("available"):
+            rows.append({"Finding": "Special-day occupancy differs" if special_result["p_value"] < .05 else "Special-day difference not established at α=.05",
+                         "Evidence": f"Daily means: regular {special_result['regular_mean']:.1%}, special {special_result['special_mean']:.1%}; Welch p={special_result['p_value']:.4g}; 95% CI [{special_result['ci_low']:.1%}, {special_result['ci_high']:.1%}].",
+                         "Project decision": "`IsSpecialDay` remains in the existing forecast feature list; this test documents its observed relevance."})
+        if queue_result.get("available"):
+            rows.append({"Finding": "Queue length has a positive occupancy association" if queue_result["r"] > 0 and queue_result["correlation_p"] < .05 else "Queue association is weak or not established",
+                         "Evidence": f"Pearson r={queue_result['r']:.3f}, p={queue_result['correlation_p']:.4g}; regression slope={queue_result['slope']:.5f}.",
+                         "Project decision": "`QueueLength` is already included as a forecast input; its incremental predictive value should be judged with held-out model evaluation."})
+        if temporal_result.get("available"):
+            rows.append({"Finding": "Occupancy varies by hour" if temporal_result["p_value"] < .05 else "Hourly variation not established at α=.05",
+                         "Evidence": f"One-way ANOVA p={temporal_result['p_value']:.4g}; {temporal_result['hourly']['hour'].nunique()} hours observed.",
+                         "Project decision": "Calendar fields (`hour`, `dow`) and occupancy lags are included in the existing forecaster; the dataset contains daytime readings only."})
+        if vehicle_result.get("available"):
+            rows.append({"Finding": "Vehicle-type group means differ" if vehicle_result["p_value"] < .05 else "Vehicle-type difference not established at α=.05",
+                         "Evidence": f"One-way ANOVA p={vehicle_result['p_value']:.4g}; {len(vehicle_result['groups'])} recorded labels.",
+                         "Project decision": "`VehicleType` is not currently a forecast input. Treat it as a candidate for a future leakage-safe, out-of-sample comparison, not as an automatically accepted feature."})
+        rows.append({"Finding": "Lot size affects raw occupancy scale",
+                     "Evidence": f"Lot capacities range from {df.Capacity.min():.0f} to {df.Capacity.max():.0f}; the pipeline defines OccupancyRate = Occupancy / Capacity.",
+                     "Project decision": "Use normalized occupancy rate for the forecasting target and compare lots on a common 0–1 scale."})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.markdown("#### Interpretation limits")
+        st.markdown("- The source dataset has no weather, transaction price, or realized revenue fields. Weather and price causality cannot be tested from these readings.\n"
+                    "- The analyses use observational readings. Repeated measurements within lots and dates can violate independent-observation assumptions; p-values should be read as exploratory evidence.\n"
+                    "- Statistical association is not the same as forecasting usefulness. The project's chronological held-out evaluation remains the appropriate check for predictive value.\n"
+                    "- VehicleType labels describe the recorded rows; the dataset does not document that occupancy is split into vehicle-specific counts.")

@@ -34,11 +34,18 @@ def lot_view(lot_id):
                      index=[last["ts"], *fc_times]),
     ])
     st.subheader("Occupancy and forecast")
-    st.caption("Forecast slots past 4:30 pm fall overnight on the chart; the data has no night readings.")
     st.line_chart(chart, y_label="Occupancy rate")
+    recent_change = recent.tail(6)["occ_rate"].mean() - recent.head(6)["occ_rate"].mean()
+    direction = "risen" if recent_change > .02 else "fallen" if recent_change < -.02 else "stayed roughly level"
+    forecast_mean = float(fc["predicted"].mean()) if not fc.empty else float(last["occ_rate"])
+    comparison = "above" if forecast_mean > last["occ_rate"] else "below" if forecast_mean < last["occ_rate"] else "about the same as"
+    st.caption(f"Recent occupancy has {direction}; the next three-hour forecast averages {forecast_mean:.0%}, {comparison} current occupancy ({last['occ_rate']:.0%}).")
 
     st.subheader("Price")
     st.line_chart(recent.set_index("ts")["price"], y_label="Rs per hour")
+    price_change = float(recent["price"].iloc[-1] - recent["price"].iloc[0])
+    price_direction = "risen" if price_change > 0 else "fallen" if price_change < 0 else "held steady"
+    st.caption(f"The lot's price has {price_direction} by Rs {abs(price_change):.0f} per hour over the displayed period.")
 
     st.subheader("Why this price")
     status = db.latest_status().set_index("lot_id")

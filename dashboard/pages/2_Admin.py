@@ -35,6 +35,9 @@ def live_results():
         "Fixed price": db.metric_series("revenue_fixed").set_index("ts")["value"].cumsum()})
     revenue.index = pd.to_datetime(revenue.index)
     st.line_chart(revenue, y_label="Cumulative revenue (Rs)")
+    change_pct = 100 * (rd / rf - 1) if rf else 0.0
+    result = "ahead of" if change_pct > 0 else "behind" if change_pct < 0 else "level with"
+    st.caption(f"ParkedIn is {abs(change_pct):.1f}% {result} fixed pricing so far in the replay.")
 
     st.subheader("Alerts")
     alerts = db.recent_alerts()
@@ -87,7 +90,9 @@ if metrics_file.exists():
     mae = pd.DataFrame(m["forecast_mae"]).rename_axis("Slots ahead")
     st.dataframe(mae.style.format("{:.4f}").highlight_min(axis=1), use_container_width=True)
     st.write("What drives the 1-slot-ahead XGBoost forecast (feature importance)")
-    st.bar_chart(pd.Series(m["feature_importance"]).sort_values(ascending=False))
+    importance = pd.Series(m["feature_importance"]).sort_values(ascending=False)
+    st.bar_chart(importance)
+    st.caption(f"The model relies most on {importance.index[0]} for its one-step-ahead forecasts.")
     st.write(f"K-Means silhouette score (4 levels): {m['kmeans_silhouette_k4']:.3f}")
 pricing_file = ROOT / "models" / "pricing_results.csv"
 if pricing_file.exists():

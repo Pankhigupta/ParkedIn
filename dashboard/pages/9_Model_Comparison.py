@@ -61,6 +61,9 @@ ax.legend()
 ax.grid(alpha=.25)
 fig.tight_layout()
 st.pyplot(fig, clear_figure=True)
+winner_counts = saved_mae.idxmin(axis=1).value_counts()
+top_model = str(winner_counts.index[0])
+st.caption(f"{top_model.replace('_', ' ').title()} has the lowest forecast error at {int(winner_counts.iloc[0])} of {len(saved_mae)} tested horizons.")
 
 rank_rows = []
 for horizon, row in saved_mae.iterrows():
@@ -168,7 +171,8 @@ if not frozen.empty:
         ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1))
         fig.tight_layout()
         st.pyplot(fig, clear_figure=True)
-        st.caption("Radar axes are scaled within the models with complete metrics at the selected horizon. A score nearer 1 is better; it is a relative visualization, not an additional evaluation metric.")
+        relative_leader = scores.mean(axis=1).idxmax()
+        st.caption(f"Across the metrics shown, {relative_leader} has the strongest overall relative scores at this horizon.")
     else:
         st.info("The radar requires at least two models with complete, comparable metrics. Current saved predictions support full metrics for XGBoost and the naive baseline only.")
 
